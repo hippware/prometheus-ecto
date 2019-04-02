@@ -178,11 +178,11 @@ defmodule Prometheus.EctoInstrumenter do
         end
       end
 
-      def handle_event(_event, _latency, metadata, _config) do
-        log(metadata)
+      def handle_event(_event, measurement, metadata, _config) do
+        log(measurement, metadata)
       end
 
-      def log(entry) do
+      def log(measurement, metadata) do
         labels = unquote(construct_labels(labels))
 
         unquote_splicing do
@@ -212,7 +212,7 @@ defmodule Prometheus.EctoInstrumenter do
             name: unquote(:"ecto_query_duration_#{duration_unit}"),
             labels: labels
           ],
-          total_value(entry)
+          total_value(measurement)
         )
 
         if unquote(counter) do
@@ -223,20 +223,11 @@ defmodule Prometheus.EctoInstrumenter do
           )
         end
 
-        entry
+        metadata
       end
 
-      def total_value(entry) do
-        zero_if_nil(entry.queue_time) + zero_if_nil(entry.query_time) +
-          zero_if_nil(entry.decode_time)
-      end
-
-      defp zero_if_nil(value) do
-        if value == nil do
-          0
-        else
-          value
-        end
+      def total_value(measurement) do
+        Map.get(measurement, :total_time, 0)
       end
 
       defp microseconds_time(time) do
@@ -273,44 +264,43 @@ defmodule Prometheus.EctoInstrumenter do
 
   defp label_value(:result) do
     quote do
-      {result, _} = entry.result
-      result
+      metadata.result
     end
   end
 
   defp label_value({label, {module, fun}}) do
     quote do
-      unquote(module).unquote(fun)(unquote(label), entry)
+      unquote(module).unquote(fun)(unquote(label), metadata)
     end
   end
 
   defp label_value({label, module}) do
     quote do
-      unquote(module).label_value(unquote(label), entry)
+      unquote(module).label_value(unquote(label), metadata)
     end
   end
 
   defp label_value(label) do
     quote do
-      label_value(unquote(label), entry)
+      label_value(unquote(label), metadata)
     end
   end
 
   defp stage_value(:queue) do
     quote do
-      entry.queue_time
+      Map.get(measurement, :queue_time, 0)
     end
   end
 
   defp stage_value(:query) do
     quote do
-      entry.query_time
+      Map.get(measurement, :query_time, 0)
     end
   end
 
   defp stage_value(:decode) do
     quote do
-      entry.decode_time
+      Map.get(measurement, :decode_time, 0)
     end
   end
 end
